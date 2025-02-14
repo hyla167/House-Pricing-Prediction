@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>House Price Predictor</title>
+</head>
+<body>
+    <h2>Predict House Price</h2>
+    <form method="POST">
+        <label>Diện tích (m2):</label>
+        <input type="number" name="area" required><br>
+
+        <label>Số phòng:</label>
+        <input type="number" name="rooms" required><br>
+
+        <label>Số toilets:</label>
+        <input type="number" name="toilets" required><br>
+
+        <label>Quận huyện:</label>
+        <input type="text" name="district" required><br>
+
+        <label>Hướng:</label>
+        <input type="text" name="direction"><br>
+
+        <label>Giấy tờ pháp lý:</label>
+        <input type="text" name="legal"><br>
+
+        <button type="submit">Predict price</button>
+    </form>
+
+    {% if prediction is not none %}
+        <h3>Predicted Price: {{ prediction }}</h3>
+    {% endif %}
+</body>
+</html>
