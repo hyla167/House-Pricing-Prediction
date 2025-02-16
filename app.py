@@ -102,7 +102,7 @@ def predict():
         prediction = model.predict(processed_input)[0] * 1000 # account for thousands of VND unit
 
         # Return JSON response
-        return jsonify({"predicted_price": prediction})
+        return jsonify({"prediction": prediction})
 
     except Exception as e:
         return jsonify({"error": str(e)})
