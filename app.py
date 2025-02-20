@@ -1,173 +1,180 @@
+import os
 import pickle
 import numpy as np
 import pandas as pd
-import joblib
+import xgboost as xgb
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO
-from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.pipeline import FeatureUnion
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
-from sklearn.impute import SimpleImputer  
-from sklearn.preprocessing import OneHotEncoder, LabelEncoder
 from sklearn.model_selection import train_test_split, RandomizedSearchCV
-import xgboost as xgb
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+import threading
+import optuna
 
-class ColumnSelector(BaseEstimator, TransformerMixin):
-    def __init__(self, feature_names):
-        self.feature_names = feature_names
-    def fit(self, dataframe, labels=None):
-        return self
-    def transform(self, dataframe):
-        return dataframe[self.feature_names].values    
-cat_feat_names = ['Quận', 'Huyện', 'Loại hình nhà ở', 'Giấy tờ pháp lý'] 
-num_feat_names = ['Số tầng', 'Số phòng ngủ', 'Diện tích', 'Dài (m)', 'Rộng (m)'] 
+def objective(trial, X_train, y_train, X_valid, y_valid):
+    """Objective function for Optuna hyperparameter tuning."""
+    params = {
+        "n_estimators": trial.suggest_int("n_estimators", 50, 300),
+        "max_depth": trial.suggest_int("max_depth", 3, 10),
+        "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
+        "subsample": trial.suggest_float("subsample", 0.6, 1.0),
+        "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
+        "reg_alpha": trial.suggest_float("reg_alpha", 1e-5, 1.0, log=True),
+        "reg_lambda": trial.suggest_float("reg_lambda", 1e-5, 1.0, log=True),
+    }
 
-# Pipeline for categorical features:
-cat_pipeline = Pipeline([
-    ('selector', ColumnSelector(cat_feat_names)),
-    ('imputer', SimpleImputer(missing_values=np.nan, strategy="constant", fill_value = "NO INFO", copy=True)),
-    ('cat_encoder', OneHotEncoder()) ])    
+    model = xgb.XGBRegressor(**params)
+    model.fit(X_train, y_train, verbose=True)
 
-
-# Pipeline for numerical features:
-num_pipeline = Pipeline([
-    ('selector', ColumnSelector(num_feat_names)),
-    ('imputer', SimpleImputer(missing_values=np.nan, strategy="median", copy=True)),  
-    ('std_scaler', StandardScaler(with_mean=True, with_std=True, copy=True)) ])  
-  
-# Combine features transformed by two above pipelines:
-full_pipeline = FeatureUnion(transformer_list=[
-    ("num_pipeline", num_pipeline),
-    ("cat_pipeline", cat_pipeline) ])  
-
-# Load the preprocessing pipeline and trained model
-with open("full_pipeline.pkl", "rb") as f:
-    full_pipeline = joblib.load(f)
-
-### Preprocessing dataset and fitting model
-raw_data = pd.read_csv('dataset/VN_housing_dataset_processed1.csv')
-# Define the target column (adjust 'target_col' to match the actual label column in your dataset)
-target_col = "Giá (triệu/m2)"  # Change this to the actual target variable
-
-# Split features (X) and target labels (y)
-X = raw_data.drop(columns=[target_col])  # Features
-y = raw_data[target_col]  # Labels
-
-# Create train and test sets (80-20 split)
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-# Apply preprocessing pipeline
-X_train_processed = full_pipeline.fit_transform(X_train)
-X_test_processed = full_pipeline.transform(X_test)
-#################
+    preds = model.predict(X_valid)
+    mse = np.mean((preds - y_valid) ** 2)
+    return mse  # Optuna minimizes this value
 
 app = Flask(__name__)
-socketio = SocketIO(app)
+socketio = SocketIO(app, cors_allowed_origins="*")
+
+dataset = None  # Store dataset metadata
+encoders = {}  # Store encoders for categorical features
+scaler = None  # Store scaler for numerical features
+original_columns = []
 
 @app.route("/")
 def index():
     return render_template("index.html")
 
-@app.route("/predict", methods=["POST"])
-def predict():
-    try:
-        # Parse JSON input
-        data = request.get_json()
-
-        # Extract input values
-        area = float(data["area"])
-        bedrooms = int(data["bedrooms"])
-        floors = int(data["floors"])
-        length = float(data["length"])
-        width = float(data["width"])
-        quan = data["quan"]
-        huyen = data["huyen"]
-        legal = data.get("legal", None)  # Can be null
-        typ = data.get("type", None)
-
-        # Create a DataFrame for the input
-        input_data = pd.DataFrame([[quan, huyen, typ, legal, floors, bedrooms, area, length, width]],
-                                  columns=["Quận", "Huyện", "Loại hình nhà ở", "Giấy tờ pháp lý", "Số tầng", "Số phòng ngủ", "Diện tích", "Dài (m)", "Rộng (m)"])
-
-        # Preprocess input
-        processed_input = full_pipeline.transform(input_data)
-
-        # load model
-        with open("best_model.pkl", "rb") as f:
-            model = joblib.load(f)
-            model.fit(X_train_processed, y_train)
-    
-        # Predict price
-        prediction = model.predict(processed_input)[0] * 1000 # account for thousands of VND unit
-
-        # Return JSON response
-        return jsonify({"prediction": prediction})
-
-    except Exception as e:
-        return jsonify({"error": str(e)})
-    
-@app.route("/train", methods=["POST"])
-def train():
+@app.route("/upload_and_train", methods=["POST"])
+def upload_and_train():
+    global dataset, encoders, scaler, original_columns
     try:
         file = request.files["file"]
         if not file:
             return jsonify({"error": "No file uploaded"})
-        
-        df = pd.read_csv(file)
-        if "Giá (triệu/m2)" not in df.columns:
-            return jsonify({"error": "Dataset must contain 'Giá (triệu/m2)' column as the target variable"})
-        
+
+        df = pd.read_csv(file, dtype=str)  # Read all as strings to analyze
+        original_columns = df.columns.tolist()
         # Identify column types
-        num_cols = []
-        cat_cols = []
-        
-        for col in df.columns:
-            if col == "Giá (triệu/m2)":
-                continue
-            num_count = df[col].apply(lambda x: isinstance(x, (int, float))).sum()
-            str_count = df[col].apply(lambda x: isinstance(x, str)).sum()
-            
-            if num_count > str_count:
-                df = df[pd.to_numeric(df[col], errors='coerce').notna()]
-                num_cols.append(col)
+        num_cols = {}
+        cat_cols = {}
+
+        for col in df.columns[:-1]:  # Ignore last column (target variable)
+            df[col] = df[col].replace(["nan", "NaN"], np.nan)  # Handle text null values
+
+            # Attempt to convert to numeric
+            numeric_values = pd.to_numeric(df[col], errors='coerce')
+            num_valid = numeric_values.notna().sum()
+            str_valid = df[col].notna().sum() - num_valid  # Non-numeric values
+
+            if num_valid > str_valid:
+                df[col] = df[col].str.replace(',', '.', regex=True)  # Normalize decimal separators
+                df[col] = pd.to_numeric(df[col], errors='coerce')  # Convert column to numeric
+                has_decimal = df[col].dropna().apply(lambda x: isinstance(x, float) and not x.is_integer()).any()
+
+                if has_decimal:
+                    num_cols[col] = "decimal"
+                else:
+                    num_cols[col] = "integer"
             else:
-                df = df[df[col].apply(lambda x: isinstance(x, str))]
-                cat_cols.append(col)
-        
-        # Encode categorical data
-        for col in cat_cols:
-            df[col] = LabelEncoder().fit_transform(df[col])
-        
-        # Normalize numerical data
-        scaler = StandardScaler()
-        df[num_cols] = scaler.fit_transform(df[num_cols])
-        
-        # Split dataset
-        X = df.drop(columns=["Giá (triệu/m2)"])
-        y = df["Giá (triệu/m2)"]
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-        
-        # XGBoost Hyperparameter Tuning
-        param_grid = {
-            'n_estimators': [100, 300, 500],
-            'max_depth': [3, 6, 10],
-            'learning_rate': [0.01, 0.1, 0.2],
-            'subsample': [0.8, 1.0]
-        }
-        
-        model = xgb.XGBRegressor()
-        search = RandomizedSearchCV(model, param_grid, cv=3, n_iter=20, verbose=1, n_jobs=-1)
-        search.fit(X_train, y_train)
-        
-        best_model = search.best_estimator_
-        with open("best_model.pkl", "wb") as f:
-            pickle.dump(best_model, f)
-        
-        return jsonify({"message": "Training complete! Best model saved as best_model.pkl"})
+                cat_cols[col] = sorted(df[col].dropna().unique().tolist())
+
+        dataset = {"num_cols": num_cols, "cat_cols": cat_cols, "df": df.to_dict(orient='list')}
+
+        # Start training in a separate thread
+        threading.Thread(target=train_model, args=(df, num_cols, cat_cols)).start()
+
+        return jsonify({"num_cols": num_cols, "cat_cols": cat_cols, "message": "Training started!"})
     except Exception as e:
         return jsonify({"error": str(e)})
 
+
+def train_model(df, num_cols, cat_cols):
+    """Background training process"""
+    global encoders, scaler, test_data
+    try:
+        target_col = df.columns[-1]  # Last column is target variable
+
+        # Encode categorical data
+        encoders = {}
+        for col in cat_cols:
+            encoder = LabelEncoder()
+            df[col] = encoder.fit_transform(df[col].astype(str))
+            encoders[col] = encoder
+
+        # Normalize numerical data
+        scaler = StandardScaler()
+        df[list(num_cols.keys())] = scaler.fit_transform(df[list(num_cols.keys())])
+
+        # Split dataset
+        X = df.drop(columns=[target_col])
+        y = df[target_col].astype(float)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+        # Optimize hyperparameters using Optuna
+        study = optuna.create_study(direction="minimize")
+        study.optimize(lambda trial: objective(trial, X_train, y_train, X_test, y_test), n_trials=300)
+
+        # Train best model
+        best_params = study.best_params
+        best_model = xgb.XGBRegressor(**best_params)
+        best_model.fit(X_train, y_train)
+        
+        # # XGBoost Hyperparameter Tuning
+        # param_grid = {
+        #     'n_estimators': [100, 200, 300],
+        #     'max_depth': [3, 5, 10],
+        #     'learning_rate': [0.01, 0.1, 0.2],
+        #     'subsample': [0.8, 1.0]
+        # }
+
+        # xgb_model = xgb.XGBRegressor()
+        # search = RandomizedSearchCV(xgb_model, param_grid, cv=3, n_iter=10, verbose=2, n_jobs=-1)
+        # search.fit(X_train, y_train)
+
+        # best_model = search.best_estimator_
+        # print("Best model:")
+        # print(best_model)
+        with open("best_model.pkl", "wb") as f:
+            pickle.dump((best_model, encoders, scaler, original_columns), f)
+
+        print("Training completed! Model saved as best_model.pkl")
+    except Exception as e:
+        print(f"Training failed: {str(e)}")
+
+
+@app.route("/predict", methods=["POST"])
+def predict():
+    global dataset, test_data
+    try:
+        if not os.path.exists("best_model.pkl"):
+            return jsonify({"error": "Model not trained yet"})
+
+        with open("best_model.pkl", "rb") as f:
+            model, encoders, scaler, original_columns = pickle.load(f)
+        print("Model:")
+        print(model)
+        data = request.json
+        df = pd.DataFrame([data])
+
+        # Convert numerical inputs
+        for col in dataset["num_cols"]:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        # Encode categorical inputs using the trained encoders
+        for col in dataset["cat_cols"]:
+            if col in encoders:
+                df[col] = encoders[col].transform(df[col].astype(str))
+            else:
+                return jsonify({"error": f"Unexpected categorical value in {col}"})
+
+        # Standardize numerical inputs
+        df[list(dataset["num_cols"].keys())] = scaler.transform(df[list(dataset["num_cols"].keys())])
+        
+        # Ensure correct column order
+        df = df[original_columns[:-1]]  # Exclude target column
+        prediction = model.predict(df)
+        print(f"Prediction: {prediction[0]}")
+        return jsonify({"prediction": round(float(prediction[0]), 2)})
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+
 if __name__ == "__main__":
     socketio.run(app, debug=True)
-
