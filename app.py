@@ -1,5 +1,5 @@
 import os
-import asyncio
+# import asyncio
 import pickle
 import numpy as np
 import pandas as pd
@@ -9,7 +9,7 @@ from flask_socketio import SocketIO
 from sklearn.model_selection import train_test_split, RandomizedSearchCV
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.metrics import mean_squared_error
-from googletrans import Translator
+# from googletrans import Translator
 import threading
 import optuna
 
