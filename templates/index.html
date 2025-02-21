@@ -7,76 +7,123 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
+    <h1>House Price Prediction</h1>
 
-    <h1>Upload Dataset & Train Model</h1>
-    <form id="uploadForm" enctype="multipart/form-data">
-        <input type="file" name="file" required>
-        <button type="submit">Upload and Train</button>
+    <h2>Upload Dataset</h2>
+    <input type="file" id="fileInput">
+    <button id="uploadButton">Upload</button>
+
+    <h2>Detected Features</h2>
+    <form id="predictionForm">
+        <div id="numericalFields"></div>
+        <div id="categoricalFields"></div>
+        <button type="button" id="trainButton" disabled>Train Model</button>
+        <button type="submit" id="predictButton" disabled>Predict</button>
     </form>
 
-    <h2>Enter Features</h2>
-    <form id="predictForm">
-        <div id="numFeatures"></div>
-        <div id="catFeatures"></div>
-        <button type="submit">Predict</button>
-    </form>
-
-    <h3>Predicted Price: <span id="predictionResult"></span></h3>
+    <h2>Prediction Result</h2>
+    <p id="predictionResult"></p>
 
     <script>
-        $("#uploadForm").submit(function(event) {
-            event.preventDefault();
-            let formData = new FormData(this);
+        $(document).ready(function () {
+            let datasetUploaded = false;
 
-            $.ajax({
-                url: "/upload_and_train",
-                type: "POST",
-                data: formData,
-                contentType: false,
-                processData: false,
-                success: function(response) {
-                    $("#numFeatures").empty();
-                    $("#catFeatures").empty();
+            $("#uploadButton").click(function () {
+                let fileInput = $("#fileInput")[0].files[0];
+                if (!fileInput) {
+                    alert("Please select a file to upload.");
+                    return;
+                }
 
-                    // Display numerical features
-                    Object.keys(response.num_cols).forEach(col => {
-                        let stepValue = response.num_cols[col] === "decimal" ? "0.01" : "1";
-                        $("#numFeatures").append(`<label>${col}: <input type='number' step='${stepValue}' name='${col}'></label><br>`);
-                    });
+                let formData = new FormData();
+                formData.append("file", fileInput);
 
-                    // Display categorical features
-                    Object.keys(response.cat_cols).forEach(col => {
-                        let options = `<option value=''>Không có thông tin</option>`;
-                        response.cat_cols[col].forEach(value => {
-                            options += `<option value='${value}'>${value}</option>`;
+                $.ajax({
+                    url: "/upload",
+                    type: "POST",
+                    data: formData,
+                    contentType: false,
+                    processData: false,
+                    success: function (response) {
+                        if (response.error) {
+                            alert("Error: " + response.error);
+                            return;
+                        }
+
+                        datasetUploaded = true;
+                        $("#trainButton").prop("disabled", false);
+                        $("#predictButton").prop("disabled", true);
+
+                        $("#numericalFields, #categoricalFields").empty();
+
+                        // Populate numerical fields
+                        $.each(response.num_cols, function (key, type) {
+                            let stepValue = type === "decimal" ? "0.01" : "1";
+                            $("#numericalFields").append(
+                                `<label>${key}: <input type="number" name="${key}" step="${stepValue}"></label><br>`
+                            );
                         });
-                        $("#catFeatures").append(`<label>${col}: <select name='${col}'>${options}</select></label><br>`);
-                    });
 
-                    alert(response.message);  // Show "Training started!" message
-                }
+                        // Populate categorical fields
+                        $.each(response.cat_cols, function (key, options) {
+                            let select = `<label>${key}: <select name="${key}">`;
+                            select += `<option value="">Không có thông tin</option>`;
+                            $.each(options, function (_, value) {
+                                select += `<option value="${value}">${value}</option>`;
+                            });
+                            select += "</select></label><br>";
+                            $("#categoricalFields").append(select);
+                        });
+
+                        alert("Dataset uploaded successfully! You can now train the model.");
+                    }
+                });
             });
-        });
 
-        $("#predictForm").submit(function(event) {
-            event.preventDefault();
-            let formData = {};
-            $("#predictForm").serializeArray().forEach(field => {
-                formData[field.name] = field.value;
+            $("#trainButton").click(function () {
+                if (!datasetUploaded) {
+                    alert("Please upload a dataset first.");
+                    return;
+                }
+
+                $.ajax({
+                    url: "/train",
+                    type: "POST",
+                    success: function (response) {
+                        if (response.error) {
+                            alert("Error: " + response.error);
+                            return;
+                        }
+                        alert("Training completed successfully.");
+                        $("#predictButton").prop("disabled", false);
+                    }
+                });
             });
 
-            $.ajax({
-                url: "/predict",
-                type: "POST",
-                contentType: "application/json",
-                data: JSON.stringify(formData),
-                success: function(response) {
-                    console.log("Response received:", response);  // Debugging
-                    $("#predictionResult").text(response.prediction + " (triệu/m2)");
-                }
+            $("#predictionForm").submit(function (event) {
+                event.preventDefault();
+
+                let formData = {};
+                $(this).serializeArray().forEach(function (item) {
+                    formData[item.name] = item.value;
+                });
+
+                $.ajax({
+                    url: "/predict",
+                    type: "POST",
+                    contentType: "application/json",
+                    data: JSON.stringify(formData),
+                    success: function (response) {
+                        if (response.error) {
+                            alert("Error: " + response.error);
+                        } else {
+                            $("#predictionResult").text("Predicted Price: (triệu/m2)" + response.prediction);
+                        }
+                    }
+                });
             });
         });
     </script>
-
 </body>
 </html>
+
