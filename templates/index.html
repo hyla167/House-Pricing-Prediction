@@ -3,127 +3,223 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>House Price Prediction</title>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-</head>
-<body>
-    <h1>House Price Prediction</h1>
-
-    <h2>Upload Dataset</h2>
-    <input type="file" id="fileInput">
-    <button id="uploadButton">Upload</button>
-
-    <h2>Detected Features</h2>
-    <form id="predictionForm">
-        <div id="numericalFields"></div>
-        <div id="categoricalFields"></div>
-        <button type="button" id="trainButton" disabled>Train Model</button>
-        <button type="submit" id="predictButton" disabled>Predict</button>
-    </form>
-
-    <h2>Prediction Result</h2>
-    <p id="predictionResult"></p>
-
+    <title>Real Estate Prediction</title>
     <script>
-        $(document).ready(function () {
-            let datasetUploaded = false;
+        document.addEventListener("DOMContentLoaded", function() {
+            const categories = {
+                "district": ['Quận Cầu Giấy', 'Quận Thanh Xuân', 'Quận Hai Bà Trưng', 'Quận Tây Hồ',
+                'Quận Đống Đa', 'Quận Hà Đông', 'Huyện Thanh Trì', 'Quận Hoàng Mai',
+                'Quận Long Biên', 'Quận Nam Từ Liêm', 'Quận Ba Đình', 'Huyện Hoài Đức',
+                'Quận Bắc Từ Liêm', 'Huyện Đan Phượng', 'Huyện Thanh Oai', 'Huyện Sóc Sơn',
+                'Huyện Gia Lâm', 'Huyện Chương Mỹ', 'Quận Hoàn Kiếm', 'Huyện Đông Anh',
+                'Huyện Thường Tín', 'Thị xã Sơn Tây', 'Huyện Mê Linh', 'Huyện Thạch Thất',
+                'Huyện Quốc Oai', 'Huyện Phúc Thọ', 'Huyện Phú Xuyên', 'Huyện Ba Vì', 'Huyện Mỹ Đức'],
+                "ward": ['Phường Nghĩa Đô', 'Phường Kim Giang', 'Phường Minh Khai',
+                'Phường Thụy Khuê', 'Phường Trung Liệt', 'Phường Đống Mác', 'Phường Xuân La',
+                'Phường Văn Quán', 'Thị trấn Văn Điển', 'Phường Định Công', 'Phường Bồ Đề',
+                'Phường Quang Trung', 'Phường Thanh Lương', 'Phường Khương Trung',
+                'Phường Gia Thụy', 'Phường Khương Đình', 'Phường Phương Canh',
+                'Phường Tương Mai', 'Phường La Khê', 'Phường Mễ Trì', 'Phường Khương Mai',
+                'Phường Láng Hạ', 'Phường Quan Hoa', 'Phường Tây Mỗ', 'Phường Ngọc Khánh',
+                'Phường Đại Mỗ', 'Xã Tả Thanh Oai', 'Phường Mỹ Đình 1', 'Xã Tam Hiệp',
+                'Phường Cống Vị', 'Phường Bách Khoa', 'Phường Vĩnh Phúc', 'Xã Kim Chung',
+                'Phường Đại Kim', 'Phường Mai Động', 'Phường Trung Tự', 'Phường Kiến Hưng',
+                'Phường Trúc Bạch', 'Phường Cổ Nhuế 1', 'Phường Đức Giang',
+                'Phường Mỹ Đình 2', 'Phường Bưởi', 'Phường Ô Chợ Dừa', 'Phường Long Biên',
+                'Phường Hoàng Văn Thụ', 'Phường Mai Dịch', 'Phường Nhân Chính',
+                'Phường Vạn Phúc', 'Phường Ngọc Hà', 'Phường Lĩnh Nam', 'Phường Xuân Đỉnh',
+                'Phường Phú Đô', 'Phường Liễu Giai', 'Thị trấn Phùng', 'Phường Kim Liên',
+                'Phường Phúc Diễn', 'Phường Kim Mã', 'Phường Trung Phụng', 'Phường Tân Mai',
+                'Phường Ngã Tư Sở', 'Phường Trung Văn', 'Phường Thượng Đình',
+                'Phường Hoàng Liệt', 'Phường Thịnh Liệt', 'Phường Quốc Tử Giám',
+                'Phường Khâm Thiên', 'Phường Trương Định', 'Phường Phú Diễn',
+                'Phường Thạch Bàn', 'Phường Ngọc Thụy', 'Phường Cầu Dền', 'Phường Phú Lương',
+                'Phường Bạch Đằng', 'Phường Phú La', 'Phường Hà Cầu', 'Phường Láng Thượng',
+                'Phường Phương Liệt', 'Phường Vĩnh Hưng', 'Phường Thanh Nhàn',
+                'Phường Cự Khối', 'Phường Đội Cấn', 'Phường Thịnh Quang', 'Phường Trung Hoà',
+                'Phường Quỳnh Mai', 'Phường Nam Đồng', 'Phường Dịch Vọng Hậu',
+                'Phường Nghĩa Tân', 'Xã Cự Khê', 'Phường Yên Hoà', 'Phường Vĩnh Tuy',
+                'Phường Quảng An', 'Phường Yên Nghĩa', 'Phường Thành Công',
+                'Phường Giáp Bát', 'Phường Dịch Vọng', 'Phường Thanh Xuân Bắc',
+                'Phường Phương Mai', 'Phường Bạch Mai', 'Phường Thanh Trì',
+                'Phường Thượng Thanh', 'Phường Trần Phú', 'Phường Nguyễn Trãi',
+                'Phường Dương Nội', 'Phường Hạ Đình', 'Phường Thanh Xuân Nam', 'Xã Vân Canh', 'Xã Phù Lỗ', 'Phường Phố Huế', 'Phường Đồng Tâm', 'Phường Xuân Phương',
+                'Phường Phạm Đình Hổ', 'Xã La Phù', 'Phường Ngọc Lâm', 'Phường Mộ Lao',
+                'Phường Phú Thượng', 'Phường Việt Hưng', 'Phường Đông Ngạc',
+                'Phường Thổ Quan', 'Phường Lê Đại Hành', 'Phường Khương Thượng',
+                'Phường Cầu Diễn', 'Phường Phú Lãm', 'Xã Cổ Bi', 'Phường Biên Giang',
+                'Phường Hàng Bột', 'Phường Cổ Nhuế 2', 'Phường Giảng Võ',
+                'Thị trấn Chúc Sơn', 'Xã Kiêu Kỵ', 'Phường Cát Linh', 'Phường Quỳnh Lôi',
+                'Phường Yên Sở', 'Xã Đặng Xá', 'Phường Yết Kiêu', 'Phường Cửa Đông',
+                'Phường Giang Biên', 'Phường Chương Dương', 'Phường Phúc La',
+                'Phường Phúc Đồng', 'Phường Thượng Cát', 'Phường Phúc Xá',
+                'Phường Văn Chương', 'Xã Tứ Hiệp', 'Xã Đông Dư', 'Phường Thanh Xuân Trung',
+                'Phường Phương Liên', 'Phường Nhật Tân', 'Thị trấn Trạm Trôi',
+                'Phường Sài Đồng', 'Xã Tân Triều', 'Phường Văn Miếu', 'Xã Đông Hội',
+                'Xã Phụng Châu', 'Thị trấn Trâu Quỳ', 'Phường Quán Thánh', 'Phường Phúc Lợi',
+                'Xã Hữu Hoà', 'Phường Đồng Nhân', 'Phường Ngô Thì Nhậm', 'Phường Đồng Mai',
+                'Xã Đông La', 'Phường Liên Mạc', 'Xã Ngọc Hồi', 'Phường Bùi Thị Xuân',
+                'Phường Xuân Tảo', 'Phường Yên Phụ', 'Xã Thanh Liệt', 'Phường Thụy Phương',
+                'Phường Hàng Bông', 'Xã Nghiêm Xuyên', 'Phường Nguyễn Du', 'Phường Tứ Liên',
+                'Phường Phan Chu Trinh', 'Xã Vĩnh Quỳnh', 'Phường Cửa Nam', 'Xã Di Trạch',
+                'Xã Võng La', 'Phường Điện Biên', 'Xã Bắc Hồng', 'Xã Hải Bối', 'Xã Đại Yên',
+                'Phường Ngô Quyền', 'Phường Phúc Tân', 'Phường Trần Hưng Đạo',
+                'Xã Liên Ninh', 'Phường Hàng Bài', 'Xã Đông Mỹ', 'Phường Đức Thắng',
+                'Phường Tràng Tiền', 'Phường Hàng Bạc', 'Xã Ngũ Hiệp', 'Xã An Thượng',
+                'Xã Yên Thường', 'Xã Duyên Hà', 'Phường Đồng Xuân', 'Xã An Khánh',
+                'Thị trấn Yên Viên', 'Phường Hàng Buồm', 'Xã Lại Yên', 'Xã Bích Hòa',
+                'Thị trấn Quang Minh', 'Thị trấn Kim Bài', 'Xã Khánh Hà', 'Phường Tây Tựu',
+                'Xã Thủy Xuân Tiên', 'Xã Kim Nỗ', 'Xã Tân Lập', 'Xã Đại Thịnh',
+                'Phường Hàng Mã', 'Xã Bình Yên', 'Xã Vạn Phúc', 'Xã Phú Cường', 'Xã Đa Tốn',
+                'Phường Hàng Bồ', 'Xã Minh Phú', 'Phường Nguyễn Trung Trực',
+                'Phường Lý Thái Tổ', 'Thị trấn Quốc Oai', 'Phường Phú Thịnh', 'Xã Đại áng',
+                'Xã Võng Xuyên', 'Xã Phú Mãn', 'Thị trấn Phú Xuyên', 'Xã Hà Hồi',
+                'Xã Phú Châu', 'Xã Cổ Đông', 'Xã Vân Côn', 'Xã Xuân Giang', 'Xã Tam Đồng',
+                'Xã Dương Quang', 'Thị trấn Đông Anh', 'Xã Đông Yên', 'Xã Vân Nội',
+                'Xã Tiên Dược', 'Xã Hương Ngải', 'Xã Hoàng Văn Thụ', 'Xã Ngọc Liệp',
+                'Xã Nhị Khê', 'Thị trấn Xuân Mai', 'Xã Bát Tràng', 'Phường Hàng Đào',
+                'Xã Thạch Hoà', 'Xã Tam Hưng', 'Xã Nguyên Khê', 'Xã Sài Sơn', 'Xã Ninh Hiệp',
+                'Xã Uy Nỗ', 'Phường Viên Sơn', 'Thị trấn Thường Tín', 'Xã Ninh Sở',
+                'Xã Phương Trung', 'Xã Vĩnh Ngọc', 'Xã Kim Sơn', 'Xã Minh Khai', 'Xã Phú Cát',
+                'Xã Duyên Thái', 'Xã Vân Hòa', 'Phường Trung Sơn Trầm', 'Xã Dương Xá',
+                'Xã Xuân Nộn', 'Xã Sơn Đông', 'Xã Văn Bình', 'Phường Hàng Gai',
+                'Xã Thanh Cao', 'Xã Mai Đình', 'Xã Đông Xuân', 'Xã Mai Lâm', 'Xã Sơn Đồng',
+                'Xã Tân Xã', 'Phường Xuân Khanh', 'Xã Thượng Mỗ', 'Xã Nghĩa Hương',
+                'Xã Dương Liễu', 'Xã Nam Hồng', 'Xã Đức Thượng', 'Phường Hàng Trống',
+                'Xã Kim Hoa', 'Xã Tiền Phong', 'Xã Bình Phú', 'Xã Dục Tú', 'Xã Đức Giang',
+                'Xã Yên Viên', 'Xã Đồng Quang', 'Xã Quang Tiến', 'Xã Đại Thành',
+                'Xã Hòa Thạch', 'Xã Tiến Xuân', 'Xã Phù Linh', 'Xã Đỗ Động', 'Xã Phú Minh',
+                'Xã Tiên Dương', 'Xã Hợp Thanh', 'Xã Minh Trí', 'Xã Tân Hội', 'Xã Thanh Xuân',
+                'Xã Song Phương', 'Xã Lê Lợi', 'Thị trấn Sóc Sơn', 'Thị trấn Liên Quan',
+                'Xã Mê Linh', 'Xã Đan Phượng', 'Xã Vân Tảo', 'Xã Đình Xuyên', 'Xã Phù Đổng',
+                'Xã Phú Sơn', 'Xã Ngọc Tảo', 'Xã Phương Đình'],
+                "house_type": ['Nhà ngõ, hẻm', 'Nhà mặt phố, mặt tiền', 'Nhà biệt thự', 'Nhà phố liền kề', 'Không có thông tin'],
+                "legal_papers": ['Đã có sổ', 'Đang chờ sổ', 'Giấy tờ khác', 'Không có thông tin']
+            };
 
-            $("#uploadButton").click(function () {
-                let fileInput = $("#fileInput")[0].files[0];
-                if (!fileInput) {
-                    alert("Please select a file to upload.");
-                    return;
-                }
-
-                let formData = new FormData();
-                formData.append("file", fileInput);
-
-                $.ajax({
-                    url: "/upload",
-                    type: "POST",
-                    data: formData,
-                    contentType: false,
-                    processData: false,
-                    success: function (response) {
-                        if (response.error) {
-                            alert("Error: " + response.error);
-                            return;
-                        }
-
-                        datasetUploaded = true;
-                        $("#trainButton").prop("disabled", false);
-                        $("#predictButton").prop("disabled", true);
-
-                        $("#numericalFields, #categoricalFields").empty();
-
-                        // Populate numerical fields
-                        $.each(response.num_cols, function (key, type) {
-                            let stepValue = type === "decimal" ? "0.01" : "1";
-                            $("#numericalFields").append(
-                                `<label>${key}: <input type="number" name="${key}" step="${stepValue}"></label><br>`
-                            );
-                        });
-
-                        // Populate categorical fields
-                        $.each(response.cat_cols, function (key, options) {
-                            let select = `<label>${key}: <select name="${key}">`;
-                            select += `<option value="">Không có thông tin</option>`;
-                            $.each(options, function (_, value) {
-                                select += `<option value="${value}">${value}</option>`;
-                            });
-                            select += "</select></label><br>";
-                            $("#categoricalFields").append(select);
-                        });
-
-                        alert("Dataset uploaded successfully! You can now train the model.");
-                    }
+            function populateSelect(id, options) {
+                const select = document.getElementById(id);
+                select.innerHTML = '<option value="">Không có thông tin</option>';
+                options.forEach(value => {
+                    const option = document.createElement("option");
+                    option.value = value;
+                    option.textContent = value;
+                    select.appendChild(option);
                 });
+            }
+
+            Object.keys(categories).forEach(key => {
+                populateSelect(key, categories[key]);
             });
 
-            $("#trainButton").click(function () {
-                if (!datasetUploaded) {
-                    alert("Please upload a dataset first.");
+            document.getElementById("train-btn").addEventListener("click", function() {
+                const fileInput = document.getElementById("file-input");
+                if (fileInput.files.length === 0) {
+                    alert("Please select a file to train the model.");
                     return;
                 }
+                const formData = new FormData();
+                formData.append("file", fileInput.files[0]);
 
-                $.ajax({
-                    url: "/train",
-                    type: "POST",
-                    success: function (response) {
-                        if (response.error) {
-                            alert("Error: " + response.error);
-                            return;
-                        }
-                        alert("Training completed successfully.");
-                        $("#predictButton").prop("disabled", false);
-                    }
-                });
+                fetch("/train", {
+                    method: "POST",
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => alert("Training successful!"))
+                .catch(error => alert("Error during training: " + error));
             });
 
-            $("#predictionForm").submit(function (event) {
+            document.getElementById("predict-form").addEventListener("submit", function(event) {
                 event.preventDefault();
+                const formData = {
+                    district: document.getElementById("district").value,
+                    ward: document.getElementById("ward").value,
+                    house_type: document.getElementById("house_type").value,
+                    legal_papers: document.getElementById("legal_papers").value,
+                    floors: parseInt(document.getElementById("floors").value),
+                    bedrooms: parseInt(document.getElementById("bedrooms").value),
+                    area: parseFloat(document.getElementById("area").value).toFixed(2),
+                    length: parseFloat(document.getElementById("length").value).toFixed(2),
+                    width: parseFloat(document.getElementById("width").value).toFixed(2)
+                };
 
-                let formData = {};
-                $(this).serializeArray().forEach(function (item) {
-                    formData[item.name] = item.value;
-                });
-
-                $.ajax({
-                    url: "/predict",
-                    type: "POST",
-                    contentType: "application/json",
-                    data: JSON.stringify(formData),
-                    success: function (response) {
-                        if (response.error) {
-                            alert("Error: " + response.error);
-                        } else {
-                            $("#predictionResult").text("Predicted Price: (triệu/m2)" + response.prediction);
-                        }
+                fetch("/predict", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(formData)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.predicted_price !== undefined) {
+                        document.getElementById("prediction-result").innerText = `Dự đoán giá: ${data.predicted_price.toLocaleString()} (triệu VND/m2)`;
+                    } else {
+                        document.getElementById("prediction-result").innerText = "Không thể dự đoán giá.";
                     }
+                })
+                .catch(error => {
+                    console.error("Error:", error);
+                    document.getElementById("prediction-result").innerText = "Có lỗi xảy ra!";
+                });fetch("/predict", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(formData)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.predicted_price !== undefined) {
+                        document.getElementById("prediction-result").innerText = `Dự đoán giá: ${data.predicted_price.toLocaleString()} VND`;
+                    } else {
+                        document.getElementById("prediction-result").innerText = "Không thể dự đoán giá.";
+                    }
+                })
+                .catch(error => {
+                    console.error("Error:", error);
+                    document.getElementById("prediction-result").innerText = "Có lỗi xảy ra!";
                 });
             });
         });
     </script>
+</head>
+<body>
+    <h2>Real Estate Price Prediction</h2>
+    <input type="file" id="file-input">
+    <button id="train-btn">Train</button>
+    
+    <form id="predict-form">
+        <label for="district">Quận:</label>
+        <select id="district"></select>
+        
+        <label for="ward">Huyện:</label>
+        <select id="ward"></select>
+
+        <label for="house_type">Loại hình nhà ở:</label>
+        <select id="house_type"></select>
+
+        <label for="legal_papers">Giấy tờ pháp lý:</label>
+        <select id="legal_papers"></select>
+
+        <label for="floors">Số tầng:</label>
+        <input type="number" id="floors" required>
+
+        <label for="bedrooms">Số phòng ngủ:</label>
+        <input type="number" id="bedrooms" required>
+
+        <label for="area">Diện tích:</label>
+        <input type="number" id="area" step="0.01" required>
+
+        <label for="length">Dài (m):</label>
+        <input type="number" id="length" step="0.01" required>
+
+        <label for="width">Rộng (m):</label>
+        <input type="number" id="width" step="0.01" required>
+
+        <button type="submit">Predict</button>
+    </form>
+    <h3 id="prediction-result"></h3>
 </body>
 </html>
-
