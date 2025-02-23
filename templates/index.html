@@ -113,21 +113,24 @@
             });
 
             document.getElementById("train-btn").addEventListener("click", function() {
-                const fileInput = document.getElementById("file-input");
-                if (fileInput.files.length === 0) {
-                    alert("Please select a file to train the model.");
-                    return;
-                }
-                const formData = new FormData();
-                formData.append("file", fileInput.files[0]);
+                const filePath = document.getElementById("file_path").value;
 
                 fetch("/train", {
                     method: "POST",
-                    body: formData
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ file_path: filePath })
                 })
                 .then(response => response.json())
-                .then(data => alert("Training successful!"))
-                .catch(error => alert("Error during training: " + error));
+                .then(data => {
+                    if (data.status === "success") {
+                        alert("Training successful!");
+                    } else {
+                        alert("Training failed: " + data.error);
+                    }
+                })
+                .catch(error => console.error("Error:", error));
             });
 
             document.getElementById("predict-form").addEventListener("submit", function(event) {
@@ -187,7 +190,8 @@
 </head>
 <body>
     <h2>Real Estate Price Prediction</h2>
-    <input type="file" id="file-input">
+    <label for="file_path">File Path:</label>
+    <input type="text" id="file_path" placeholder="Enter file path" required>
     <button id="train-btn">Train</button>
     
     <form id="predict-form">

@@ -57,15 +57,17 @@ def index():
 def train():
     global dataset, encoders, scaler, original_columns
     try:
-        file = request.files.get("file")
-        if not file:
-            return jsonify({"error": "No file uploaded"})
+        data = request.json  # Receive JSON data
+        file_path = data.get("file_path")
+
+        if not file_path:
+            return jsonify({"status": "error", "error": "No file path provided"}), 400
         
-        if file.filename.endswith('.csv'):
-            df = pd.read_csv(file, dtype=str)
-        elif file.filename.endswith('.xlsx') or file.filename.endswith('.xls'):
+        if file_path.endswith('.csv'):
+            df = pd.read_csv(file_path, dtype=str)
+        elif file_path.endswith('.xlsx') or file_path.endswith('.xls'):
             print("Hello")
-            df = pd.read_excel(file, dtype=str)  # Read Excel file
+            df = pd.read_excel(file_path, dtype=str)  # Read Excel file
             print("DEBUG")
             print(df.head())  # Print first few rows to debug
         # df = pd.read_csv(file, dtype=str)
